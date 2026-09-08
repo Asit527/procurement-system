@@ -2,6 +2,34 @@
 
 A Java backend learning project for supplier management and purchase orders. Six Spring Boot services demonstrate REST APIs, separate databases, service discovery, centralized configuration, JWT authentication, scope-based authorization, and circuit-breaker recovery.
 
+## Assignment: what to buy, and from whom
+
+The purchasing decision engine is implemented in **order-service**. It takes a weekly demand list and a supplier-offer snapshot, then returns an exact minimum-cost on-time allocation under explicit assumptions. Unlike the existing manual order API, the caller does **not** choose the winning supplier or allocated quantities.
+
+- Endpoint: **POST /api/orders/purchase-plans**, through gateway port 8080 or directly on order-service port 8082.
+- Authentication: use an **asit** bearer token (write scope). Viewer cannot POST a plan.
+- Demo input: [examples/purchase-plan.json](examples/purchase-plan.json).
+- Algorithm and assumptions: [docs/PURCHASING-PLANNER.md](docs/PURCHASING-PLANNER.md).
+- Output: per-part supplier allocations, prices, costs, arrival dates, rejected/unused suppliers, explanations, and shortages.
+- Planning is a stateless proposal. It does not reserve capacity or place purchase orders.
+
+### Quick demonstration
+
+1. Start the services using the setup below and log in as asit.
+2. In Postman select POST, paste `http://localhost:8080/api/orders/purchase-plans`, and set Bearer Token.
+3. Paste the contents of `examples/purchase-plan.json` into Body → raw → JSON.
+4. Expect `FULFILLED`, total cost **900.00**, and **100 units from SUP-B**. SUP-LATE is rejected for missing the deadline; SUP-A loses on total cost despite its lower bulk unit price.
+5. Change SUP-B capacity to 30: expect `SHORTAGE`, supplied **90**, shortage **10**, and total cost **840.00**.
+
+Run the focused engine and API contract tests without databases or other services:
+
+```text
+cd order-service
+./mvnw -Dtest=PurchasePlannerTest,PurchasePlanControllerTest test
+```
+
+These tests compile the service and include 200 deterministic small cases checked against exhaustive enumeration. They are separate from the generated full-context startup test and do not validate the deployed security chain.
+
 ## Services
 
 | Service | Port | Responsibility |
@@ -192,7 +220,7 @@ Handled responses include 400 for invalid business input, 401 for invalid creden
 
 ## Demonstration checklist
 
-These scenarios have been exercised manually during development; this is not an automated test report.
+The original CRUD/security scenarios below were exercised manually during development. The purchasing planner additionally has the focused automated suite described above.
 
 1. Log in as asit; create a supplier, then an order using its ID.
 2. Read suppliers and orders through the gateway.
@@ -240,7 +268,7 @@ This is a local demonstration, not a production deployment:
 - Order cancellation is a basic status update; no optimistic locking, approval workflow, idempotency key, pagination, or order editing is implemented.
 - Supplier lookup currently maps most Feign errors, including downstream authentication errors, to 503.
 - Schema updates use Hibernate ddl-auto=update instead of versioned migrations.
-- Generated tests exist, but a comprehensive automated suite and CI pipeline have not been verified. Deployment automation, Docker, and production observability remain future work.
+- The purchasing planner has focused engine and API contract tests; a comprehensive automated suite for the other flows and a CI pipeline have not been verified. Deployment automation, Docker, and production observability remain future work.
 
 ## Repository layout
 

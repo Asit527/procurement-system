@@ -1,0 +1,59 @@
+{
+  "planningDate": "2026-09-08",
+  "demands": [
+    {
+      "partCode": "BOLT-M8",
+      "quantity": 100,
+      "neededBy": "2026-09-15"
+    }
+  ],
+  "offers": [
+    {
+      "supplierCode": "SUP-A",
+      "partCode": "BOLT-M8",
+      "leadDays": 2,
+      "minimumQuantity": 20,
+      "capacity": 60,
+      "tiers": [
+        {
+          "fromQuantity": 1,
+          "unitPrice": 10
+        },
+        {
+          "fromQuantity": 50,
+          "unitPrice": 8
+        }
+      ]
+    },
+    {
+      "supplierCode": "SUP-B",
+      "partCode": "BOLT-M8",
+      "leadDays": 3,
+      "minimumQuantity": 10,
+      "capacity": 100,
+      "tiers": [
+        {
+          "fromQuantity": 1,
+          "unitPrice": 12
+        },
+        {
+          "fromQuantity": 80,
+          "unitPrice": 9
+        }
+      ]
+    },
+    {
+      "supplierCode": "SUP-LATE",
+      "partCode": "BOLT-M8",
+      "leadDays": 10,
+      "minimumQuantity": 1,
+      "capacity": 100,
+      "tiers": [
+        {
+          "fromQuantity": 1,
+          "unitPrice": 1
+        }
+      ]
+    }
+  ]
+}
