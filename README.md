@@ -1,6 +1,8 @@
 # Procurement System
 
-A Java backend learning project for supplier management and purchase orders. Six Spring Boot services demonstrate REST APIs, separate databases, service discovery, centralized configuration, JWT authentication, scope-based authorization, and circuit-breaker recovery.
+A Java backend for deciding which suppliers should supply required parts, in what quantities, and at what cost before a deadline. The planner considers lead times, minimum order quantities, capacity, and all-units bulk discounts, and explains its allocations and shortages.
+
+The repository also contains supplier CRUD, manual purchase orders, JWT authentication, service discovery, and centralized configuration. These support APIs are separate from the stateless purchasing planner.
 
 ## Assignment: what to buy, and from whom
 
@@ -36,7 +38,7 @@ These tests compile the service and include 200 deterministic small cases checke
 | --- | --- | --- |
 | api-gateway | 8080 | Routes requests and validates JWTs |
 | supplier-service | 8081 | Supplier CRUD, validation, and duplicate-code checks |
-| order-service | 8082 | Create, retrieve, and cancel purchase orders |
+| order-service | 8082 | Calculate purchase plans; create, retrieve, and cancel manual orders |
 | auth-service | 8083 | Authenticate local accounts, issue JWTs, publish public keys |
 | discovery-server | 8761 | Eureka service registry |
 | config-server | 8888 | Read service configuration from GitHub |
@@ -61,7 +63,7 @@ flowchart LR
     A -. registration .-> E
 ```
 
-The gateway and both business services validate tokens. Order-service forwards the authenticated caller's token when checking a supplier. Database writes happen only after successful supplier verification.
+The gateway and both business services validate tokens. Order-service forwards the authenticated caller's token when checking a supplier. Manual order creation saves an order after successful supplier verification. The purchase-plan endpoint uses the submitted offers directly and neither calls supplier-service nor writes a plan to the database.
 
 ## Technology
 
@@ -187,7 +189,8 @@ Use gateway base URL `http://localhost:8080`. Supplier/order endpoints require a
 | GET | /api/suppliers/{id} | 200, supplier |
 | PUT | /api/suppliers/{id} | 200, updated supplier |
 | DELETE | /api/suppliers/{id} | 204, empty body |
-| POST | /api/orders | 201, created order |
+| POST | /api/orders/purchase-plans | 200, plan with FULFILLED or SHORTAGE status |
+| POST | /api/orders | 201, created manual order |
 | GET | /api/orders | 200, order list |
 | GET | /api/orders/{id} | 200, order |
 | PATCH | /api/orders/{id}/cancel | 200, cancelled order |
@@ -217,6 +220,12 @@ Create a supplier first and use its returned ID in the order body. This example 
 The total is calculated as quantity × unitPrice using BigDecimal. New orders have status CREATED. Cancellation changes status to CANCELLED and preserves the record. Cancellation requires no request body. Every successful order POST creates a new order.
 
 Handled responses include 400 for invalid business input, 401 for invalid credentials or missing/invalid tokens, 403 for insufficient scope, 404 for missing resources, 409 for duplicate supplier codes, and 503 when supplier verification is unavailable. Some framework-level malformed-request errors may currently appear as 403 because the default error dispatch is denied by security.
+
+## Verification status
+
+The focused planner suite passed from a fresh local Git clone: **10 tests, zero failures or errors** (8 engine tests and 2 API contract tests). The run used the existing Java installation and Maven dependency cache. It does not establish that all six services start on a completely clean machine. The full multi-service startup from a new environment remains unverified.
+
+The planner was also exercised through the gateway with a bearer token and returned the expected FULFILLED plan costing 900.00. The shortage scenario above is a reproducible follow-up check; do not treat its expected output as a separate recorded live-test result.
 
 ## Demonstration checklist
 
@@ -256,7 +265,15 @@ To observe state changes, temporarily set `logging.level.io.github.resilience4j.
 | Java import cannot be resolved | Put starter dependencies in the main dependencies block and update Maven |
 | Package mismatch | Match the Java package declaration to its source directory |
 
-## Current limits and follow-up work
+## Assumptions and deliberately omitted scope
+
+The planner maximizes on-time supplied quantity first, then minimizes purchase cost. Quantities are integers; split allocations are allowed and overbuying is not. Discounts apply to the entire supplier lot. Capacity is independent per supplier/part snapshot, with no shared global capacity or reservation. Lead times use calendar days. See [the planner documentation](docs/PURCHASING-PLANNER.md) for input limits, complexity, tie handling, and the complete assumptions.
+
+- **Frontend:** omitted because the assignment is a backend; requests can be demonstrated in Postman.
+- **Docker:** omitted for this submission; use the manual setup above.
+- **Persisted offers, plans, and automatic order placement:** omitted to keep the purchasing decision explicit and reproducible from a submitted snapshot. A plan does not create manual order records.
+
+## Current limits
 
 This is a local demonstration, not a production deployment:
 
@@ -268,7 +285,7 @@ This is a local demonstration, not a production deployment:
 - Order cancellation is a basic status update; no optimistic locking, approval workflow, idempotency key, pagination, or order editing is implemented.
 - Supplier lookup currently maps most Feign errors, including downstream authentication errors, to 503.
 - Schema updates use Hibernate ddl-auto=update instead of versioned migrations.
-- The purchasing planner has focused engine and API contract tests; a comprehensive automated suite for the other flows and a CI pipeline have not been verified. Deployment automation, Docker, and production observability remain future work.
+- The purchasing planner has focused engine and API contract tests; a comprehensive automated suite for the other flows and a CI pipeline have not been verified. Deployment automation and production observability are not included.
 
 ## Repository layout
 
@@ -281,5 +298,7 @@ procurement-system/
 ├── order-service/
 ├── supplier-service/
 ├── config-repo/
+├── docs/PURCHASING-PLANNER.md
+├── examples/purchase-plan.json
 └── README.md
 ```
