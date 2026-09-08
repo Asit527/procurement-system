@@ -6,7 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.procurement.order.client.SupplierClient;
+import com.procurement.order.client.config.SupplierClient; // Current location
 import com.procurement.order.dto.OrderRequest;
 import com.procurement.order.dto.OrderResponse;
 import com.procurement.order.entity.PurchaseOrder;
