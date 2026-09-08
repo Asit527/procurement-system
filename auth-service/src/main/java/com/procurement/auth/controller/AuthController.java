@@ -26,34 +26,48 @@ public class AuthController {
     private final JwtEncoder jwtEncoder;
     private final RSAKey rsaKey;
     private final PasswordEncoder passwordEncoder;
-    private final String username;
-    private final String passwordHash;
+    private final Map<String, LocalUser> users;
+    private final String dummyPasswordHash;
     private final String issuer;
 
     public AuthController(
             JwtEncoder jwtEncoder,
             RSAKey rsaKey,
             PasswordEncoder passwordEncoder,
-            @Value("${app.auth.username}") String username,
-            @Value("${app.auth.password}") String password,
+            @Value("${app.auth.username}") String adminUsername,
+            @Value("${app.auth.password}") String adminPassword,
+            @Value("${app.auth.viewer-password}") String viewerPassword,
             @Value("${app.auth.issuer}") String issuer) {
 
         this.jwtEncoder = jwtEncoder;
         this.rsaKey = rsaKey;
         this.passwordEncoder = passwordEncoder;
-        this.username = username;
-        this.passwordHash = passwordEncoder.encode(password); // Keep a hash
         this.issuer = issuer;
+
+        // Permissions are assigned by the server, never by login input
+        this.users = Map.of(
+                adminUsername, new LocalUser(
+                        passwordEncoder.encode(adminPassword),
+                        "procurement.read procurement.write"),
+                "viewer", new LocalUser(
+                        passwordEncoder.encode(viewerPassword),
+                        "procurement.read"));
+
+        // Perform a password check even for unknown usernames
+        this.dummyPasswordHash =
+                passwordEncoder.encode(UUID.randomUUID().toString());
     }
 
     @PostMapping("/api/auth/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
+        LocalUser user = users.get(request.username());
 
-        // Check the password even when the username is incorrect
+        String hash = user != null ? user.passwordHash() : dummyPasswordHash;
         boolean passwordMatches =
-                passwordEncoder.matches(request.password(), passwordHash);
+                passwordEncoder.matches(request.password(), hash);
 
-        if (!username.equals(request.username()) || !passwordMatches) {
+        if (user == null || !passwordMatches) {
+            // Return the same error for invalid usernames and passwords
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("message", "Invalid username or password"));
         }
@@ -62,12 +76,12 @@ public class AuthController {
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(issuer)
-                .subject(username)
+                .subject(request.username())
                 .audience(List.of("procurement-api"))
                 .issuedAt(now)
-                .expiresAt(now.plusSeconds(900)) // Token expires in 15 minutes
+                .expiresAt(now.plusSeconds(900)) // Expire after 15 minutes
                 .id(UUID.randomUUID().toString())
-                .claim("scope", "procurement.read procurement.write")
+                .claim("scope", user.scope()) // Use this user's permissions
                 .build();
 
         JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256)
@@ -78,15 +92,19 @@ public class AuthController {
                 JwtEncoderParameters.from(header, claims)).getTokenValue();
 
         return ResponseEntity.ok()
-                .header("Cache-Control", "no-store") // Avoid caching access tokens
+                .header("Cache-Control", "no-store") // Avoid caching tokens
                 .header("Pragma", "no-cache")
                 .body(new LoginResponse(token, "Bearer", 900));
     }
 
     @GetMapping("/.well-known/jwks.json")
     public Map<String, Object> publicKeys() {
-        // Publish only the public key; never expose the private key
+        // Expose only the public verification key
         return new JWKSet(rsaKey.toPublicJWK()).toJSONObject();
+    }
+
+    private record LocalUser(String passwordHash, String scope) {
+        // Local test account and its permissions
     }
 
     public record LoginRequest(
@@ -99,6 +117,6 @@ public class AuthController {
             String accessToken,
             String tokenType,
             long expiresIn) {
-        // Login response; expiresIn is in seconds
+        // Token lifetime is expressed in seconds
     }
 }
